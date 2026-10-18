@@ -1,0 +1,25 @@
+# Personal project planning notes
+PROJECT_PLAN.md
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+coverage/
+.vite/
+backend/src/generated/prisma/
+
+# Local tooling and operating system files
+.DS_Store
+.neon/
+.agents/
+skills-lock.json
+.idea/
+.vscode/
+*.log

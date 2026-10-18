@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SetVisibility {
+  PRIVATE
+  PUBLIC
+}
+
+enum CardCreationSource {
+  MANUAL
+  AI
+  COPIED
+}
+
+enum StudyMode {
+  FLASHCARDS
+  TRANSLATION
+  MULTIPLE_CHOICE
+  MIXED
+}
+
+enum StudySessionStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+model User {
+  id             String          @id @default(uuid()) @db.Uuid
+  telegramId     BigInt          @unique
+  username       String?
+  firstName      String
+  lastName       String?
+  languageCode   String?
+  photoUrl       String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  vocabularySets VocabularySet[]
+  cardProgress   CardProgress[]
+  studySessions  StudySession[]
+  studyAnswers   StudyAnswer[]
+}
+
+model VocabularySet {
+  id             String          @id @default(uuid()) @db.Uuid
+  ownerId        String          @db.Uuid
+  copiedFromId   String?         @db.Uuid
+  title          String
+  description    String?
+  sourceLanguage String
+  targetLanguage String
+  visibility     SetVisibility   @default(PRIVATE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  copiedFrom     VocabularySet?  @relation("SetCopies", fields: [copiedFromId], references: [id], onDelete: SetNull)
+  copies         VocabularySet[] @relation("SetCopies")
+  cards          Card[]
+  studySessions  StudySession[]
+
+  @@index([ownerId])
+  @@index([visibility, createdAt])
+  @@index([sourceLanguage, targetLanguage])
+}
+
+model Card {
+  id             String             @id @default(uuid()) @db.Uuid
+  setId          String             @db.Uuid
+  sourceText     String
+  translation    String
+  explanation    String?
+  examples       Json?
+  creationSource CardCreationSource @default(MANUAL)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  set            VocabularySet      @relation(fields: [setId], references: [id], onDelete: Cascade)
+  progress       CardProgress[]
+  studyAnswers   StudyAnswer[]
+
+  @@index([setId])
+}
+
+model CardProgress {
+  id             String   @id @default(uuid()) @db.Uuid
+  userId         String   @db.Uuid
+  cardId         String   @db.Uuid
+  difficulty     Float    @default(2.5)
+  intervalDays   Int      @default(0)
+  correctStreak  Int      @default(0)
+  totalReviews   Int      @default(0)
+  correctReviews Int      @default(0)
+  nextReviewAt   DateTime @default(now())
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card           Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cardId])
+  @@index([userId, nextReviewAt])
+}
+
+model StudySession {
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @db.Uuid
+  setId       String?            @db.Uuid
+  mode        StudyMode
+  status      StudySessionStatus @default(ACTIVE)
+  startedAt   DateTime           @default(now())
+  completedAt DateTime?
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  set         VocabularySet?     @relation(fields: [setId], references: [id], onDelete: SetNull)
+  answers     StudyAnswer[]
+
+  @@index([userId, startedAt])
+}
+
+model StudyAnswer {
+  id             String       @id @default(uuid()) @db.Uuid
+  sessionId      String       @db.Uuid
+  userId         String       @db.Uuid
+  cardId         String       @db.Uuid
+  submittedValue String?
+  isCorrect      Boolean
+  responseTimeMs Int?
+  confidence     Int?
+  answeredAt     DateTime     @default(now())
+  session        StudySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  card           Card         @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId, answeredAt])
+  @@index([cardId])
+}
