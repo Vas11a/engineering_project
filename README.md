@@ -38,6 +38,10 @@ cp backend/.env.example backend/.env
 
 Use the pooled Neon connection string for `DATABASE_URL`. Use the direct connection string for `DATABASE_URL_UNPOOLED`, because schema migrations must not run through PgBouncer.
 
+Set `TELEGRAM_BOT_TOKEN` to the token issued by BotFather. The backend uses it to verify the signature and age of Telegram Mini App `initData`; the token must never be exposed to the frontend.
+
+For ordinary browser development outside Telegram, keep `DEV_AUTH_ENABLED=true` and configure a positive `DEV_TELEGRAM_ID`. This fallback works only outside production and is rejected when `NODE_ENV=production`.
+
 Generate the Prisma client and apply the database migration:
 
 ```bash
@@ -77,3 +81,13 @@ npm run build
 
 - `GET /health` — process liveness
 - `GET /ready` — database readiness
+
+## Authenticated API
+
+The Mini App sends Telegram launch data as `Authorization: tma <initData>`. All private routes resolve the current user from that signed value and scope database operations to the user's ID.
+
+- `GET /api/v1/users/me` — create/update and return the current Telegram user
+- `GET|POST /api/v1/sets` — list or create personal vocabulary sets
+- `GET|PATCH|DELETE /api/v1/sets/:setId` — read, update, or delete an owned set
+- `GET|POST /api/v1/sets/:setId/cards` — list or create cards in an owned set
+- `PATCH|DELETE /api/v1/sets/:setId/cards/:cardId` — update or delete an owned card

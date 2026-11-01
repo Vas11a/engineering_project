@@ -1,19 +1,28 @@
 import cors from 'cors';
-import express, { type Express } from 'express';
+import express, { type Express, type RequestHandler } from 'express';
 import helmet from 'helmet';
 
 import { notFoundHandler } from './middleware/not-found.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { createHealthRouter } from './routes/health.js';
+import { createApiRouter } from './routes/api.js';
+import type { AppStore } from '../store/types.js';
+
+type ApiDependencies = {
+  authenticate: RequestHandler;
+  store: AppStore;
+};
 
 type AppDependencies = {
   corsOrigin: string;
   checkDatabase: () => Promise<void>;
+  api?: ApiDependencies;
 };
 
 export function createApp({
   corsOrigin,
   checkDatabase,
+  api,
 }: AppDependencies): Express {
   const app = express();
 
@@ -29,7 +38,9 @@ export function createApp({
 
   app.use(createHealthRouter(checkDatabase));
 
-  app.use('/api/v1', express.Router());
+  if (api) {
+    app.use('/api/v1', api.authenticate, createApiRouter(api.store));
+  }
   app.use(notFoundHandler);
   app.use(errorHandler);
 
