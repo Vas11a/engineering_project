@@ -31,7 +31,7 @@ The browser calls only the backend. Database access, Telegram tokens and AI cred
 
 ## Local setup
 
-Requires Node.js 22.18+ and npm 10+. From the repository root:
+Requires Node.js 22 (22.18 or newer within that major) and npm 10+. From the repository root:
 
 ```bash
 cp backend/.env.example backend/.env
