@@ -1,6 +1,5 @@
 import { retrieveRawInitData } from '@tma.js/sdk-react';
-
-const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
+import { apiBaseUrl } from './base-url';
 
 export class ApiError extends Error {
   constructor(
@@ -33,25 +32,50 @@ export async function apiRequest<T>(
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(`${apiUrl}/api/v1${path}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const callerSignal = options.signal;
+  const abortFromCaller = () => controller.abort();
+  callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  if (callerSignal?.aborted) controller.abort();
+  let timedOut = false;
+  const timeout = setTimeout(
+    () => {
+      timedOut = true;
+      controller.abort();
+    },
+    path.startsWith('/ai/') ? 65_000 : 30_000,
+  );
 
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as {
-      error?: { message?: string };
-    } | null;
-    throw new ApiError(
-      payload?.error?.message ??
-        `Request failed with status ${response.status}`,
-      response.status,
-    );
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as {
+        error?: { message?: string };
+      } | null;
+      throw new ApiError(
+        payload?.error?.message ??
+          `Request failed with status ${response.status}`,
+        response.status,
+      );
+    }
+
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    return (await response.json()) as T;
+  } catch (cause) {
+    if (timedOut) {
+      throw new Error('The request timed out. Please try again.', { cause });
+    }
+    throw cause;
+  } finally {
+    clearTimeout(timeout);
+    callerSignal?.removeEventListener('abort', abortFromCaller);
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return (await response.json()) as T;
 }

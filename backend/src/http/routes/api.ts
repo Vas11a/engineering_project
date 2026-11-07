@@ -23,6 +23,7 @@ const setInputSchema = setFieldsSchema.extend({
 });
 
 const setPatchSchema = setFieldsSchema
+  .extend({ visibility: z.enum(['PRIVATE', 'PUBLIC']) })
   .partial()
   .refine(
     (value) => Object.keys(value).length > 0,
@@ -35,6 +36,7 @@ const cardFieldsSchema = z
     translation: z.string().trim().min(1).max(250),
     explanation: nullableExplanationSchema,
     examples: examplesSchema,
+    creationSource: z.enum(['MANUAL', 'AI']).optional(),
   })
   .strict();
 

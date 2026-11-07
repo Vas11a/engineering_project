@@ -12,6 +12,8 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "tsx src/scripts/test-integration.ts",
+    "bot:setup": "tsx src/scripts/telegram-setup.ts",
     "typecheck": "npm run prisma:generate && tsc --noEmit --pretty false",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --check .",

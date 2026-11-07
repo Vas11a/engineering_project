@@ -1,6 +1,8 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 import type { TelegramProfile } from '../auth/types.js';
+import { HttpError } from '../http/errors.js';
+import { serializable } from '../database/transaction.js';
 import type {
   AppStore,
   CardInput,
@@ -23,7 +25,7 @@ function toUserView(user: {
   return { ...user, telegramId: user.telegramId.toString() };
 }
 
-function toSetView(set: {
+export function toSetView(set: {
   id: string;
   ownerId: string;
   copiedFromId: string | null;
@@ -57,7 +59,7 @@ function normalizeExamples(value: unknown): string[] {
     : [];
 }
 
-function toCardView(card: {
+export function toCardView(card: {
   id: string;
   setId: string;
   sourceText: string;
@@ -139,11 +141,27 @@ export class PrismaAppStore implements AppStore {
   }
 
   async updateSet(ownerId: string, setId: string, input: VocabularySetPatch) {
-    const result = await this.client.vocabularySet.updateMany({
-      where: { id: setId, ownerId },
-      data: input,
+    return serializable(this.client, async (transaction) => {
+      const current = await transaction.vocabularySet.findFirst({
+        where: { id: setId, ownerId },
+        include: setInclude,
+      });
+      if (!current) return null;
+      if (input.visibility === 'PUBLIC' && current._count.cards === 0) {
+        throw new HttpError(
+          409,
+          'EMPTY_SET',
+          'Add a card before publishing this set.',
+        );
+      }
+      return toSetView(
+        await transaction.vocabularySet.update({
+          where: { id: setId },
+          data: input,
+          include: setInclude,
+        }),
+      );
     });
-    return result.count === 0 ? null : this.getSet(ownerId, setId);
   }
 
   async deleteSet(ownerId: string, setId: string): Promise<boolean> {
@@ -168,16 +186,26 @@ export class PrismaAppStore implements AppStore {
   }
 
   async createCard(ownerId: string, setId: string, input: CardInput) {
-    const set = await this.client.vocabularySet.findFirst({
-      where: { id: setId, ownerId },
-      select: { id: true },
-    });
-    if (!set) return null;
+    return serializable(this.client, async (transaction) => {
+      const set = await transaction.vocabularySet.findFirst({
+        where: { id: setId, ownerId },
+        select: { id: true },
+      });
+      if (!set) return null;
 
-    const card = await this.client.card.create({
-      data: { setId, ...input, creationSource: 'MANUAL' },
+      const card = await transaction.card.create({
+        data: {
+          setId,
+          ...input,
+          creationSource: input.creationSource ?? 'MANUAL',
+        },
+      });
+      await transaction.vocabularySet.update({
+        where: { id: setId },
+        data: { updatedAt: new Date() },
+      });
+      return toCardView(card);
     });
-    return toCardView(card);
   }
 
   async updateCard(
@@ -186,17 +214,32 @@ export class PrismaAppStore implements AppStore {
     cardId: string,
     input: CardPatch,
   ) {
-    const ownedCard = await this.client.card.findFirst({
-      where: { id: cardId, setId, set: { ownerId } },
-      select: { id: true },
-    });
-    if (!ownedCard) return null;
+    return serializable(this.client, async (transaction) => {
+      const ownedCard = await transaction.card.findFirst({
+        where: { id: cardId, setId, set: { ownerId } },
+        select: { id: true, sourceText: true, translation: true },
+      });
+      if (!ownedCard) return null;
 
-    const card = await this.client.card.update({
-      where: { id: cardId },
-      data: input,
+      const card = await transaction.card.update({
+        where: { id: cardId },
+        data: input,
+      });
+      await transaction.vocabularySet.update({
+        where: { id: setId },
+        data: { updatedAt: new Date() },
+      });
+      // An edited meaning is new learning material, not a mastered old card.
+      if (
+        (input.sourceText !== undefined &&
+          input.sourceText !== ownedCard.sourceText) ||
+        (input.translation !== undefined &&
+          input.translation !== ownedCard.translation)
+      ) {
+        await transaction.cardProgress.deleteMany({ where: { cardId } });
+      }
+      return toCardView(card);
     });
-    return toCardView(card);
   }
 
   async deleteCard(
@@ -204,13 +247,23 @@ export class PrismaAppStore implements AppStore {
     setId: string,
     cardId: string,
   ): Promise<boolean> {
-    const ownedCard = await this.client.card.findFirst({
-      where: { id: cardId, setId, set: { ownerId } },
-      select: { id: true },
-    });
-    if (!ownedCard) return false;
+    return serializable(this.client, async (transaction) => {
+      const ownedCard = await transaction.card.findFirst({
+        where: { id: cardId, setId, set: { ownerId } },
+        select: { id: true },
+      });
+      if (!ownedCard) return false;
 
-    await this.client.card.delete({ where: { id: cardId } });
-    return true;
+      await transaction.card.delete({ where: { id: cardId } });
+      const remaining = await transaction.card.count({ where: { setId } });
+      await transaction.vocabularySet.update({
+        where: { id: setId },
+        data: {
+          updatedAt: new Date(),
+          ...(remaining === 0 ? { visibility: 'PRIVATE' } : {}),
+        },
+      });
+      return true;
+    });
   }
 }

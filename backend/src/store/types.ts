@@ -24,11 +24,12 @@ export type CardInput = {
   translation: string;
   explanation: string | null;
   examples: string[];
+  creationSource?: 'MANUAL' | 'AI';
 };
 
 export type CardPatch = Partial<CardInput>;
 
-export type CardView = CardInput & {
+export type CardView = Omit<CardInput, 'creationSource'> & {
   id: string;
   setId: string;
   creationSource: 'MANUAL' | 'AI' | 'COPIED';

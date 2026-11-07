@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: lexilo-api
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm run db:deploy && npm start
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: NODE_ENV
+        value: production
+      - key: DEV_AUTH_ENABLED
+        value: "false"
+      - key: BOT_MODE
+        value: webhook
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
+      - key: MINI_APP_URL
+        sync: false
+      - key: PUBLIC_API_URL
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true

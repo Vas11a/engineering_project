@@ -13,17 +13,24 @@ export function initializeTelegram(): boolean {
     return false;
   }
 
-  initialized = true;
-
-  themeParams.mount();
+  if (!themeParams.isMounted()) themeParams.mount();
   if (!themeParams.isCssVarsBound()) {
     themeParams.bindCssVars();
   }
 
+  const updateColorScheme = () => {
+    document.documentElement.style.colorScheme = themeParams.isDark()
+      ? 'dark'
+      : 'light';
+  };
+  updateColorScheme();
+  themeParams.isDark.sub(updateColorScheme);
+
   if (miniApp.isSupported()) {
-    miniApp.mount();
-    miniApp.bindCssVars();
+    if (!miniApp.isMounted()) miniApp.mount();
+    if (!miniApp.isCssVarsBound()) miniApp.bindCssVars();
   }
+  initialized = true;
 
   void viewport
     .mount()

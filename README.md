@@ -1,73 +1,77 @@
-# Telegram Language Learning Application
+# Lexilo — Telegram Language Learning
 
-A university engineering project for learning foreign-language vocabulary through a Telegram Mini App and a Telegram bot.
+A university engineering project: a Telegram Mini App and bot for learning vocabulary with adaptive spaced repetition.
+
+[Первый запуск и подключение токенов — инструкция на русском](docs/START_HERE_RU.md).
+
+[Деплой frontend и backend одним проектом Vercel Services](docs/VERCEL.md).
+
+## Features
+
+- Telegram authentication and owner-scoped personal vocabulary sets/cards.
+- Flashcards, typed translations, multiple choice and mixed study sessions.
+- Persistent, resumable sessions with server-side grading and adaptive reviews.
+- Progress dashboard, per-set results and recent history.
+- Public catalog with search, language filters, pagination and independent copies.
+- Optional AI drafts with editable preview and explicit confirmation before saving.
+- Bot commands: /start, /help, /library, /study and /progress.
 
 ## Architecture
 
-The repository contains two independent TypeScript applications:
+Two independent TypeScript applications:
 
-- `frontend` — React, Vite, Tailwind CSS, and the Telegram Mini Apps SDK
-- `backend` — Node.js, Express, Prisma ORM, and PostgreSQL hosted on Neon
+| Directory | Stack                                         | Hosting         |
+| --------- | --------------------------------------------- | --------------- |
+| frontend  | React, Vite, Tailwind, Telegram Mini Apps SDK | Vercel Services |
+| backend   | Express, Zod, Prisma                          | Vercel Services |
 
-The frontend is intended for Vercel. The backend and Telegram bot are intended for Render.
+The preferred deployment uses one Vercel project with two Services: the frontend at `/` and Express at `/api/`, with `/health` and `/ready` routed to Express as well. PostgreSQL stays in Neon. Services is available in Beta on all Vercel plans. The checked-in `vercel.json` owns routing and per-service build settings; import the repository root (`./`) with the **Services** preset. The backend's Vercel entrypoint exports the app without starting a listener or polling worker; `npm run dev` retains the local server workflow.
 
-## Requirements
-
-- Node.js 22.18 or newer
-- npm 10 or newer
-- A Neon project with pooled and direct PostgreSQL connection strings
+The browser calls only the backend. Database access, Telegram tokens and AI credentials stay on the server. PostgreSQL can run on Neon or locally.
 
 ## Local setup
 
-Install dependencies for both applications:
+Requires Node.js 22.18+ and npm 10+. From the repository root:
 
 ```bash
-cd frontend
-npm install
-
-cd ../backend
-npm install
-```
-
-Create local environment files from the examples:
-
-```bash
-cp frontend/.env.example frontend/.env
 cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 ```
 
-Use the pooled Neon connection string for `DATABASE_URL`. Use the direct connection string for `DATABASE_URL_UNPOOLED`, because schema migrations must not run through PgBouncer.
-
-Set `TELEGRAM_BOT_TOKEN` to the token issued by BotFather. The backend uses it to verify the signature and age of Telegram Mini App `initData`; the token must never be exposed to the frontend.
-
-For ordinary browser development outside Telegram, keep `DEV_AUTH_ENABLED=true` and configure a positive `DEV_TELEGRAM_ID`. This fallback works only outside production and is rejected when `NODE_ENV=production`.
-
-Generate the Prisma client and apply the database migration:
+Fill backend/.env with DATABASE_URL (pooled Neon URL), DATABASE_URL_UNPOOLED (direct URL), and TELEGRAM_BOT_TOKEN. For browser development, retain DEV_AUTH_ENABLED=true and a positive DEV_TELEGRAM_ID. This identity is rejected in production.
 
 ```bash
 cd backend
+npm ci
 npm run prisma:generate
-npm run db:migrate
+npm run db:deploy
 npm run db:check
-```
-
-Start the backend and frontend in separate terminals:
-
-```bash
-cd backend
 npm run dev
 ```
+
+In another terminal:
 
 ```bash
 cd frontend
+npm ci
 npm run dev
 ```
 
-The frontend runs at `http://localhost:5173` and expects the backend at `http://localhost:3000` by default.
+Open http://localhost:5173. The API defaults to port 3000. AI and bot delivery can remain disabled while testing the library and study flows. Existing environments apply checked-in migrations with db:deploy; developers create new migrations with db:migrate.
 
-## Quality checks
+## Tokens and real Telegram testing
 
-Run these commands in both `frontend` and `backend` before committing:
+Follow [the Vercel Services guide](docs/VERCEL.md) for the preferred single-project deployment, production variables, migrations and Telegram webhook setup. The [separate Render/Vercel guide](docs/DEPLOYMENT.md) remains an alternative.
+
+Production API requests use the same origin, so `VITE_API_URL` can remain unset. Local development defaults to `http://localhost:3000`; set `VITE_API_URL` only for a deliberately separate API origin. Database URLs and bot/AI tokens belong in server environment variables, never in `VITE_*` variables.
+
+AI defaults to OpenAI gpt-5-mini. Set AI_API_KEY to enable it; compatible Neon AI Gateway credentials are also supported. Missing AI configuration does not block manual cards.
+
+Startup never registers a Telegram webhook automatically. Configure BOT_MODE and public URLs, then run npm run bot:setup.
+
+## Verification
+
+Run in both application directories:
 
 ```bash
 npm run format
@@ -77,17 +81,6 @@ npm run test
 npm run build
 ```
 
-## Health endpoints
+See [testing](docs/TESTING.md), [API reference](docs/API.md) and [architecture/scheduling](docs/ARCHITECTURE.md).
 
-- `GET /health` — process liveness
-- `GET /ready` — database readiness
-
-## Authenticated API
-
-The Mini App sends Telegram launch data as `Authorization: tma <initData>`. All private routes resolve the current user from that signed value and scope database operations to the user's ID.
-
-- `GET /api/v1/users/me` — create/update and return the current Telegram user
-- `GET|POST /api/v1/sets` — list or create personal vocabulary sets
-- `GET|PATCH|DELETE /api/v1/sets/:setId` — read, update, or delete an owned set
-- `GET|POST /api/v1/sets/:setId/cards` — list or create cards in an owned set
-- `PATCH|DELETE /api/v1/sets/:setId/cards/:cardId` — update or delete an owned card
+GET /health checks the process; GET /ready checks PostgreSQL. Private endpoints require Authorization: tma <Telegram initData>. Telegram webhooks use a separate secret header.

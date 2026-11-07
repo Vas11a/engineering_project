@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 
 import type { SetInput, VocabularySet } from '../api/vocabulary';
+import { ErrorNotice } from './common';
 
 type SetFormProps = {
   initial?: VocabularySet;
@@ -10,6 +11,7 @@ type SetFormProps = {
 };
 
 export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [sourceLanguage, setSourceLanguage] = useState(
@@ -21,6 +23,17 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (
+      !title.trim() ||
+      sourceLanguage.trim().length < 2 ||
+      targetLanguage.trim().length < 2
+    ) {
+      setValidationError(
+        'Enter a title and language names with at least two characters.',
+      );
+      return;
+    }
+    setValidationError(null);
     await onSubmit({
       title: title.trim(),
       description: description.trim() || null,
@@ -41,10 +54,12 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
         </h2>
       </div>
 
+      {validationError && <ErrorNotice message={validationError} />}
       <label className="field">
         <span>Title</span>
         <input
           required
+          disabled={busy}
           maxLength={120}
           value={title}
           onChange={(event) => setTitle(event.target.value)}
@@ -55,6 +70,7 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
       <label className="field">
         <span>Description</span>
         <textarea
+          disabled={busy}
           maxLength={500}
           rows={3}
           value={description}
@@ -68,6 +84,9 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
           <span>From</span>
           <input
             required
+            minLength={2}
+            maxLength={50}
+            disabled={busy}
             value={sourceLanguage}
             onChange={(event) => setSourceLanguage(event.target.value)}
           />
@@ -76,6 +95,9 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
           <span>To</span>
           <input
             required
+            minLength={2}
+            maxLength={50}
+            disabled={busy}
             value={targetLanguage}
             onChange={(event) => setTargetLanguage(event.target.value)}
           />
@@ -86,6 +108,7 @@ export function SetForm({ initial, busy, onCancel, onSubmit }: SetFormProps) {
         <button
           className="button-secondary flex-1"
           type="button"
+          disabled={busy}
           onClick={onCancel}
         >
           Cancel

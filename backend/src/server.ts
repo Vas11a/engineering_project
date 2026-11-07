@@ -1,53 +1,35 @@
 import { createServer } from 'node:http';
 
-import { getEnvironment } from './config/env.js';
-import {
-  checkDatabaseConnection,
-  disconnectDatabase,
-  prisma,
-} from './database/prisma.js';
-import { createApp } from './http/app.js';
-import { createAuthenticationMiddleware } from './http/middleware/authenticate.js';
-import { verifyTelegramInitData } from './auth/telegram.js';
-import { PrismaAppStore } from './store/prisma-store.js';
+import { disconnectDatabase } from './database/prisma.js';
+import { createRuntime } from './runtime.js';
 
-const environment = getEnvironment();
-const store = new PrismaAppStore(prisma);
-const developmentProfile = environment.DEV_AUTH_ENABLED
-  ? {
-      telegramId: BigInt(environment.DEV_TELEGRAM_ID!),
-      username: 'local_developer',
-      firstName: environment.DEV_TELEGRAM_FIRST_NAME,
-      lastName: null,
-      languageCode: 'en',
-      photoUrl: null,
-    }
-  : undefined;
-const authenticate = createAuthenticationMiddleware({
-  store,
-  developmentProfile,
-  verifyInitData: (rawInitData) =>
-    verifyTelegramInitData(rawInitData, {
-      botToken: environment.TELEGRAM_BOT_TOKEN,
-      maxAgeSeconds: environment.TELEGRAM_AUTH_MAX_AGE_SECONDS,
-    }),
-});
-const app = createApp({
-  corsOrigin: environment.CORS_ORIGIN,
-  checkDatabase: checkDatabaseConnection,
-  api: { authenticate, store },
-});
+const { app, environment, bot } = createRuntime();
 const server = createServer(app);
+const stopPolling =
+  environment.BOT_MODE === 'polling' ? bot?.startPolling() : undefined;
 
 server.listen(environment.PORT, () => {
   console.log(`API listening on port ${environment.PORT}`);
+  if (environment.BOT_MODE === 'disabled') {
+    console.log(
+      'Telegram bot is disabled. Set BOT_MODE=polling for local bot testing.',
+    );
+  } else {
+    console.log(
+      `Telegram bot mode: ${environment.BOT_MODE}${environment.MINI_APP_URL ? '' : ' (text commands only; MINI_APP_URL is not configured)'}`,
+    );
+  }
 });
 
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}. Shutting down.`);
+  stopPolling?.();
+  const forcedShutdown = setTimeout(() => process.exit(1), 10_000);
+  forcedShutdown.unref();
 
   server.close(async (error) => {
     await disconnectDatabase();
+    clearTimeout(forcedShutdown);
 
     if (error) {
       console.error(error);

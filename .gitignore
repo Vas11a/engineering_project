@@ -18,6 +18,7 @@ backend/src/generated/prisma/
 # Local tooling and operating system files
 .DS_Store
 .neon/
+.vercel/
 .agents/
 skills-lock.json
 .idea/

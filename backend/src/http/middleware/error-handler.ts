@@ -29,6 +29,30 @@ export const errorHandler: ErrorRequestHandler = (
     return;
   }
 
+  if (error instanceof SyntaxError && 'body' in error) {
+    response.status(400).json({
+      error: {
+        code: 'INVALID_JSON',
+        message: 'The request body must be valid JSON.',
+      },
+    });
+    return;
+  }
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'type' in error &&
+    error.type === 'entity.too.large'
+  ) {
+    response.status(413).json({
+      error: {
+        code: 'BODY_TOO_LARGE',
+        message: 'The request body is too large.',
+      },
+    });
+    return;
+  }
+
   console.error(error);
 
   response.status(500).json({
